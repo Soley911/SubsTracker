@@ -1,0 +1,45 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # 每6小时运行一次
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Add upstream
+        run: |
+          git remote add upstream https://github.com/wangwangit/SubsTracker.git
+          git fetch upstream
+
+      - name: Check for conflicts
+        id: check_conflict
+        run: |
+          git checkout main
+          if git merge --no-commit --no-ff upstream/main > /dev/null 2>&1; then
+            echo "no_conflict=true" >> $GITHUB_OUTPUT
+            git merge --abort
+          else
+            echo "no_conflict=false" >> $GITHUB_OUTPUT
+            git merge --abort
+          fi
+
+      - name: Merge and push (no conflict)
+        if: steps.check_conflict.outputs.no_conflict == 'true'
+        run: |
+          git merge upstream/main --no-edit
+          git push origin main
+
+      - name: Conflict detected – manual intervention required
+        if: steps.check_conflict.outputs.no_conflict == 'false'
+        run: |
+          echo "::error::Merge conflict with upstream. Please resolve manually."
+          exit 1
